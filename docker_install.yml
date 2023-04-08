@@ -1,0 +1,60 @@
+---
+- name: Socle docker_install
+  hosts: all 
+  become: yes
+  tasks:
+
+  - name: Check remote OS
+    fail:
+      msg: "Unsupported OS {{ ansible_distribution }} {{ ansible_distribution_version }}"
+    when: ansible_distribution not in ['Debian', 'Ubuntu']
+
+  - name : Apt update
+    apt:
+      update_cache: yes
+    changed_when: false
+
+  - name : Install packages
+    apt:
+      name: "{{ item }}"
+    loop:
+      - curl
+      - ca-certificates
+      - gnupg
+
+  - name: Get package facts
+    package_facts:
+      manager: auto
+    register: package_facts
+
+  - name : Docker Already installed
+    debug:
+      msg: "docker-ce already installed"
+    when: "'docker-ce' in package_facts.ansible_facts.packages"
+
+  - name: Add Docker GPG key to apt keyring
+    apt_key:
+      url: https://download.docker.com/linux/{{ ansible_distribution | lower }}/gpg
+    when: "'docker-ce' not in package_facts.ansible_facts.packages"
+
+  - name: Add Docker repository to sources.list
+    apt_repository:
+      repo: deb https://download.docker.com/linux/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} stable
+    when: "'docker-ce' not in package_facts.ansible_facts.packages"
+
+  - name : Apt update
+    apt:
+      update_cache: yes
+    changed_when: false
+    when: "'docker-ce' not in package_facts.ansible_facts.packages"
+
+  - name : Install Docker
+    apt:
+      name: "{{ item }}"
+    loop:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-compose-plugin
+      - docker-buildx-plugin
+    when: "'docker-ce' not in package_facts.ansible_facts.packages"
