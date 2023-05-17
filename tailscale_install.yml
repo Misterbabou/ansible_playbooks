@@ -1,0 +1,71 @@
+---
+- name: Socle tailscale_install
+  hosts: all 
+  become: yes
+  tasks:
+
+  - name: Check remote OS
+    fail:
+      msg: "Unsupported OS {{ ansible_distribution }} {{ ansible_distribution_version }}"
+    when: ansible_distribution not in ['Debian', 'Ubuntu']
+
+  - name : Apt update
+    apt:
+      update_cache: yes
+    changed_when: false
+
+  - name : Install packages
+    apt:
+      name: "{{ item }}"
+    loop:
+      - curl
+      - ca-certificates
+      - gnupg
+
+  - name: Get package facts
+    package_facts:
+      manager: auto
+    register: package_facts
+
+  - name : Tailscale Already installed
+    debug:
+      msg: "Tailscale already installed"
+    when: "'tailscale' in package_facts.ansible_facts.packages"
+
+  - name: Set architecture variable
+    set_fact:
+      architecture: "{{ 'amd64' if ansible_architecture == 'x86_64' else ('arm64' if ansible_architecture == 'aarch64' else 'armhf') }}"
+    when: "'tailscale' not in package_facts.ansible_facts.packages"
+
+  - name: Ensure APT keyrings Directory present
+    file:
+      state: directory
+      path: "/etc/apt/keyrings"
+      owner: "root"
+      group: "root"
+      mode: 0755
+    when: "'tailscale' not in package_facts.ansible_facts.packages"
+
+  - name: Add Tailscale GPG key to apt keyrings
+    apt_key:
+      url: https://pkgs.tailscale.com/stable/{{ ansible_distribution | lower }}/{{ ansible_distribution_release }}.noarmor.gpg
+      keyring: /etc/apt/keyrings/tailscale.gpg
+    when: "'tailscale' not in package_facts.ansible_facts.packages"
+
+  - name: Add Tailscale repository to sources.list
+    apt_repository:
+      repo: deb [signed-by=/etc/apt/keyrings/tailscale.gpg] https://pkgs.tailscale.com/stable/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} main
+    when: "'tailscale' not in package_facts.ansible_facts.packages"
+
+  - name : Apt update
+    apt:
+      update_cache: yes
+    changed_when: false
+    when: "'tailscale' not in package_facts.ansible_facts.packages"
+
+  - name : Install Tailscale
+    apt:
+      name: "{{ item }}"
+    loop:
+      - tailscale
+    when: "'tailscale' not in package_facts.ansible_facts.packages"
